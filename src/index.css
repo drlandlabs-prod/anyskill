@@ -1,0 +1,133 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* MATRIX PROTOCOL theme — black / matrix green primary,
+       off-white / orange / british racing green accents */
+    --background: 150 33% 2.5%;          /* #040806 near-black green */
+    --foreground: 60 20% 93%;            /* off-white #f2efe4 */
+    --card: 150 30% 4%;
+    --card-foreground: 60 20% 93%;
+    --popover: 150 30% 4%;
+    --popover-foreground: 60 20% 93%;
+    --primary: 136 100% 50%;             /* matrix green #00ff41 */
+    --primary-foreground: 150 60% 3%;
+    --secondary: 147 100% 13%;           /* british racing green #004225-ish */
+    --secondary-foreground: 136 100% 70%;
+    --muted: 150 20% 9%;
+    --muted-foreground: 140 12% 55%;
+    --accent: 24 100% 55%;               /* signal orange #ff6b1a */
+    --accent-foreground: 150 60% 3%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 140 40% 14%;
+    --input: 140 40% 14%;
+    --ring: 136 100% 50%;
+    --radius: 0.375rem;
+
+    --matrix: 136 100% 50%;
+    --matrix-dim: 140 60% 22%;
+    --brg: 147 100% 13%;                 /* british racing green */
+    --offwhite: 60 20% 93%;
+    --signal: 24 100% 55%;               /* orange */
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { color-scheme: dark; }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+  }
+  .font-mono, code, kbd { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+}
+
+/* ---- custom utilities ---- */
+.text-matrix   { color: hsl(var(--matrix)); }
+.text-signal   { color: hsl(var(--signal)); }
+.text-offwhite { color: hsl(var(--offwhite)); }
+.bg-brg        { background-color: hsl(var(--brg)); }
+.border-matrix { border-color: hsl(var(--matrix)); }
+.border-brg    { border-color: hsl(var(--brg)); }
+
+.glow-matrix {
+  text-shadow: 0 0 6px hsl(var(--matrix) / 0.7), 0 0 24px hsl(var(--matrix) / 0.35);
+}
+.glow-soft {
+  text-shadow: 0 0 10px hsl(var(--matrix) / 0.35);
+}
+.box-glow {
+  box-shadow: 0 0 0 1px hsl(var(--matrix) / 0.35), 0 0 22px hsl(var(--matrix) / 0.12), inset 0 0 22px hsl(var(--matrix) / 0.04);
+}
+.box-glow-orange {
+  box-shadow: 0 0 0 1px hsl(var(--signal) / 0.5), 0 0 22px hsl(var(--signal) / 0.15);
+}
+
+/* scanline overlay */
+.scanlines::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    hsl(var(--matrix) / 0.025) 3px,
+    transparent 4px
+  );
+  mix-blend-mode: screen;
+}
+
+/* grid backdrop */
+.grid-bg {
+  background-image:
+    linear-gradient(hsl(var(--matrix) / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--matrix) / 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* blinking caret */
+.caret::after {
+  content: "█";
+  margin-left: 2px;
+  color: hsl(var(--matrix));
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* node pulse for the graph */
+@keyframes nodePulse {
+  0%, 100% { filter: drop-shadow(0 0 3px hsl(var(--matrix) / 0.8)); }
+  50%      { filter: drop-shadow(0 0 12px hsl(var(--matrix) / 1)); }
+}
+.node-pulse { animation: nodePulse 2.2s ease-in-out infinite; }
+
+@keyframes dashFlow { to { stroke-dashoffset: -24; } }
+.edge-flow {
+  stroke-dasharray: 6 6;
+  animation: dashFlow 1.2s linear infinite;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.45s ease both; }
+
+@keyframes tickerScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.ticker { animation: tickerScroll 28s linear infinite; }
+
+/* thin scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: hsl(var(--background)); }
+::-webkit-scrollbar-thumb { background: hsl(var(--matrix-dim)); border-radius: 4px; }
