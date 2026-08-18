@@ -6,7 +6,7 @@ import {
   loadHabit, saveHabit, completeRep, streak, missedYesterday, heatmapDays,
   FOUR_LAWS, TWO_MIN_REP, type HabitState,
 } from '@/lib/habits'
-import { decomposeSkill, loadActiveNode } from '@/lib/skills'
+import { currentGraph, loadActiveNode } from '@/lib/skills'
 import { loadProfile } from '@/lib/session'
 
 export function Habits() {
@@ -19,7 +19,7 @@ export function Habits() {
   // the daily rep trains whatever node is active on the current skill graph
   const rep = useMemo(() => {
     if (!profile) return TWO_MIN_REP
-    const graph = decomposeSkill(profile.skill, profile.priorLevel)
+    const graph = currentGraph(profile.skill, profile.priorLevel)
     const node = loadActiveNode(graph)
     const label = node.label.replace(/^CAPSTONE · /, '')
     return {

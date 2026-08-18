@@ -4,6 +4,9 @@ import { MatrixRain } from '@/components/MatrixRain'
 import { Button } from '@/components/ui/button'
 import { saveProfile } from '@/lib/session'
 import { useDictation, useSpeechSynth } from '@/hooks/useSpeech'
+import { AISettings } from '@/components/AISettings'
+import { loadAIConfig, decomposeSkillAI } from '@/lib/ai'
+import { storeGraph, graphFromAI } from '@/lib/skills'
 import type { LearnerProfile } from '@/lib/skills'
 
 type Phase = 'hero' | 'chat' | 'decompose'
@@ -95,13 +98,31 @@ export function Landing() {
 
   const runDecompose = (sk: string, lv: LearnerProfile['priorLevel']) => {
     setPhase('decompose')
-    DECOMPOSE_LOG.forEach((line, i) => {
+    const ai = loadAIConfig()
+    const lines = ai
+      ? [...DECOMPOSE_LOG.slice(0, 2), `> querying ${ai.model} for live decomposition …`, ...DECOMPOSE_LOG.slice(2)]
+      : DECOMPOSE_LOG
+    lines.forEach((line, i) => {
       setTimeout(() => setLogLines((l) => [...l, line]), 350 * (i + 1))
     })
-    setTimeout(() => {
-      saveProfile({ skill: sk, goal: '', hoursPerWeek: hours, deadline: '', priorLevel: lv })
-      navigate('/map')
-    }, 350 * (DECOMPOSE_LOG.length + 1) + 600)
+
+    saveProfile({ skill: sk, goal: '', hoursPerWeek: hours, deadline: '', priorLevel: lv })
+
+    const finish = () => navigate('/map')
+    if (ai) {
+      decomposeSkillAI(ai, sk, lv)
+        .then((g) => {
+          storeGraph(graphFromAI(g, lv))
+          setLogLines((l) => [...l, `> AI graph received: ${g.nodes.length} nodes ✓`])
+          setTimeout(finish, 900)
+        })
+        .catch((e) => {
+          setLogLines((l) => [...l, `> AI failed (${e instanceof Error ? e.message.slice(0, 60) : 'error'}) → local fallback`])
+          setTimeout(finish, 1200)
+        })
+    } else {
+      setTimeout(finish, 350 * (lines.length + 1) + 600)
+    }
   }
 
   return (
@@ -116,6 +137,7 @@ export function Landing() {
           <span className="text-signal">_</span>
         </div>
         <div className="flex items-center gap-5">
+          <AISettings />
           <button
             onClick={() => navigate('/finances')}
             className="font-mono text-[11px] tracking-widest text-signal hover:text-accent transition-colors"

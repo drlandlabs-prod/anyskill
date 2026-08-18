@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router'
 import { MatrixRain } from '@/components/MatrixRain'
 import { SkillGraph } from '@/components/SkillGraph'
 import { Button } from '@/components/ui/button'
-import { decomposeSkill, buildSprints, saveActiveNode, resetProgress, type SkillNode } from '@/lib/skills'
+import { buildSprints, saveActiveNode, resetProgress, currentGraph, type SkillNode } from '@/lib/skills'
 import { loadProfile } from '@/lib/session'
 
 const KIND_COLOR: Record<SkillNode['kind'], string> = {
@@ -16,7 +16,7 @@ export function SkillMap() {
   const navigate = useNavigate()
   const profile = loadProfile()
   const graph = useMemo(
-    () => decomposeSkill(profile?.skill ?? 'Negotiation', profile?.priorLevel ?? 'none'),
+    () => currentGraph(profile?.skill ?? 'Negotiation', profile?.priorLevel ?? 'none'),
     [profile?.skill, profile?.priorLevel],
   )
   const sprints = useMemo(() => buildSprints(graph), [graph])

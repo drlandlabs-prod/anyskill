@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { MatrixRain } from '@/components/MatrixRain'
 import { Button } from '@/components/ui/button'
-import { decomposeSkill, loadActiveNode, buildDrill } from '@/lib/skills'
+import { currentGraph, loadActiveNode, buildDrill } from '@/lib/skills'
+import { loadAIConfig, generateDrillAI, evaluateAnswerAI, type AIDrill } from '@/lib/ai'
 import { loadProfile } from '@/lib/session'
 
 type Phase = 'prime' | 'model' | 'drill' | 'reflect' | 'done'
@@ -19,17 +20,34 @@ export function Session() {
   const profile = loadProfile()
   const skill = profile?.skill ?? 'Negotiation'
   const graph = useMemo(
-    () => decomposeSkill(skill, profile?.priorLevel ?? 'none'),
+    () => currentGraph(skill, profile?.priorLevel ?? 'none'),
     [skill, profile?.priorLevel],
   )
   const node = useMemo(() => loadActiveNode(graph), [graph])
-  const drill = useMemo(() => buildDrill(node, skill), [node, skill])
+  const localDrill = useMemo(() => buildDrill(node, skill), [node, skill])
   const nodeLabel = node.label.replace(/^CAPSTONE · /, '')
   const isAnchoring = node.id === 'anchoring'
+  const ai = useMemo(() => loadAIConfig(), [])
+
+  // live drill: replace the local template with an AI-generated scenario
+  const [aiDrill, setAiDrill] = useState<AIDrill | null>(null)
+  const [drillLoading, setDrillLoading] = useState(false)
+  useEffect(() => {
+    if (!ai || isAnchoring) return
+    setDrillLoading(true)
+    generateDrillAI(ai, nodeLabel, node.kind, skill)
+      .then(setAiDrill)
+      .catch(() => setAiDrill(null))
+      .finally(() => setDrillLoading(false))
+  }, [ai, isAnchoring, nodeLabel, node.kind, skill])
+
+  const drill = aiDrill ?? localDrill
+
   const [phase, setPhase] = useState<Phase>('prime')
   const [answer, setAnswer] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
   const [good, setGood] = useState(false)
+  const [evaluating, setEvaluating] = useState(false)
   const [mastery, setMastery] = useState(() => Math.round(node.mastery * 100) || 12)
   const [seconds, setSeconds] = useState(0)
   const [reflectText, setReflectText] = useState('')
@@ -43,12 +61,26 @@ export function Session() {
   const mm = String(Math.floor(seconds / 60)).padStart(2, '0')
   const ss = String(seconds % 60).padStart(2, '0')
 
-  const submitAnswer = () => {
-    if (!answer.trim()) return
+  const submitAnswer = async () => {
+    if (!answer.trim() || evaluating) return
+    if (ai) {
+      setEvaluating(true)
+      try {
+        const ev = await evaluateAnswerAI(ai, nodeLabel, drill.prompt, answer)
+        setGood(ev.good)
+        setFeedback(ev.feedback)
+        setMastery((m) => Math.min(100, m + Math.round(ev.masteryDelta * 100)))
+        return
+      } catch {
+        // fall through to local scoring
+      } finally {
+        setEvaluating(false)
+      }
+    }
     const hits = drill.goodSignals.filter((s) => answer.toLowerCase().includes(s.toLowerCase()))
     const isGood = hits.length >= 3
     setGood(isGood)
-    setFeedback(isGood ? drill.feedbackGood : drill.feedbackWeak)
+    setFeedback(isGood ? localDrill.feedbackGood : localDrill.feedbackWeak)
     setMastery((m) => Math.min(100, m + (isGood ? 18 : 5)))
   }
 
@@ -196,6 +228,8 @@ export function Session() {
                 <p className="font-mono text-sm text-offwhite leading-relaxed whitespace-pre-line">{drill.prompt}</p>
               </div>
               <p className="font-mono text-xs text-muted-foreground">HINT · {drill.hint}</p>
+              {drillLoading && <p className="font-mono text-xs text-signal animate-pulse">◌ generating a live drill for this node…</p>}
+              {ai && !drillLoading && aiDrill && <p className="font-mono text-[10px] text-matrix/60">◉ LIVE AI DRILL · {ai.model}</p>}
               <textarea
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
@@ -204,8 +238,9 @@ export function Session() {
                 className="w-full bg-black/50 border border-matrix/30 rounded px-4 py-3 font-mono text-sm text-offwhite placeholder:text-muted-foreground focus:outline-none focus:border-matrix focus:box-glow"
               />
               {!feedback ? (
-                <Button onClick={submitAnswer} className="bg-accent text-accent-foreground font-mono tracking-widest hover:bg-accent/90 box-glow-orange">
-                  SUBMIT FOR FEEDBACK ▸
+                <Button onClick={submitAnswer} disabled={evaluating}
+                  className="bg-accent text-accent-foreground font-mono tracking-widest hover:bg-accent/90 box-glow-orange disabled:opacity-50">
+                  {evaluating ? '◌ EVALUATING…' : 'SUBMIT FOR FEEDBACK ▸'}
                 </Button>
               ) : (
                 <div className={`fade-up border rounded p-5 font-mono text-sm leading-relaxed ${

@@ -30,6 +30,58 @@ export interface LearnerProfile {
   priorLevel: 'none' | 'some' | 'working'
 }
 
+// --- stored (possibly AI-generated) graph for the current skill ---
+const GRAPH_KEY = 'anyskill.graph'
+
+export function storeGraph(g: SkillGraph) {
+  localStorage.setItem(GRAPH_KEY, JSON.stringify(g))
+}
+
+/** Returns the stored graph if it matches the given skill (case-insensitive). */
+export function loadStoredGraph(skill?: string): SkillGraph | null {
+  try {
+    const raw = localStorage.getItem(GRAPH_KEY)
+    if (!raw) return null
+    const g = JSON.parse(raw) as SkillGraph
+    if (!skill || g.skill.toLowerCase() === skill.toLowerCase()) return g
+    return null
+  } catch {
+    return null
+  }
+}
+
+/** The graph for the current profile: stored AI graph if present, else local mock. */
+export function currentGraph(skill: string, priorLevel: LearnerProfile['priorLevel']): SkillGraph {
+  return loadStoredGraph(skill) ?? decomposeSkill(skill, priorLevel)
+}
+
+/** Convert an AI-generated graph into the runtime SkillGraph shape,
+ *  applying the same diagnosis simulation as the mock path. */
+export function graphFromAI(ai: { skill: string; nodes: { id: string; label: string; kind: NodeKind; tier: number; hours: number; prereqs: string[]; transfer: boolean }[] }, priorLevel: LearnerProfile['priorLevel']): SkillGraph {
+  const nodes: SkillNode[] = ai.nodes.map((n) => ({
+    ...n,
+    state: n.tier === 0 ? 'available' : 'locked',
+    mastery: 0,
+  }))
+  if (priorLevel !== 'none') {
+    const markKnown = priorLevel === 'working' ? 2 : 1 // tiers 0 (and 1) get credited
+    nodes.forEach((n) => {
+      if (n.tier < markKnown) {
+        n.state = 'known'
+        n.mastery = 0.85
+      }
+    })
+    nodes.forEach((n) => {
+      if (n.state === 'locked' && n.prereqs.every((p) => nodes.find((x) => x.id === p)?.state === 'known')) {
+        n.state = 'available'
+      }
+    })
+  }
+  const total = nodes.reduce((a, n) => a + n.hours, 0)
+  const saved = nodes.filter((n) => n.state === 'known').reduce((a, n) => a + n.hours, 0)
+  return { skill: ai.skill, totalHours: Math.round((total - saved) * 10) / 10, savedHours: saved, nodes }
+}
+
 const NEGOTIATION: SkillNode[] = [
   // tier 0 — foundations
   { id: 'batna',     label: 'BATNA & walk-away power',  kind: 'concept',   tier: 0, hours: 1.5, prereqs: [],                 state: 'available', mastery: 0.1, transfer: true },
@@ -197,9 +249,10 @@ export function buildDrill(node: SkillNode, skill: string): Drill {
   }
 }
 
-/** Full reset between learning tasks — clears the profile and active node. */
+/** Full reset between learning tasks — clears the profile, stored graph, and active node. */
 export function resetProgress(includeHabits = false) {
   localStorage.removeItem('anyskill.profile')
+  localStorage.removeItem(GRAPH_KEY)
   localStorage.removeItem(NODE_KEY)
   if (includeHabits) localStorage.removeItem('anyskill.habits.v1')
 }
