@@ -12,22 +12,24 @@ import { loadProfile } from '@/lib/session'
 export function Habits() {
   const navigate = useNavigate()
   const profile = loadProfile()
+  const skill = profile?.skill
+  const priorLevel = profile?.priorLevel
   const [habit, setHabit] = useState<HabitState>(() => loadHabit())
   const [repState, setRepState] = useState<'idle' | 'running' | 'done'>('idle')
   const [secs, setSecs] = useState(120)
 
   // the daily rep trains whatever node is active on the current skill graph
   const rep = useMemo(() => {
-    if (!profile) return TWO_MIN_REP
-    const graph = currentGraph(profile.skill, profile.priorLevel)
+    if (!skill || !priorLevel) return TWO_MIN_REP
+    const graph = currentGraph(skill, priorLevel)
     const node = loadActiveNode(graph)
     const label = node.label.replace(/^CAPSTONE · /, '')
     return {
       title: `One rep of "${label}"`,
-      instruction: `Do a single 2-minute rep of ${label} for ${profile.skill}: one concrete application, out loud or on paper. That's it.`,
+      instruction: `Do a single 2-minute rep of ${label} for ${skill}: one concrete application, out loud or on paper. That's it.`,
       reward: `+mastery on ${label.toUpperCase()} · streak extended`,
     }
-  }, [profile?.skill, profile?.priorLevel])
+  }, [skill, priorLevel])
 
   const s = streak(habit)
   const missed = missedYesterday(habit)
