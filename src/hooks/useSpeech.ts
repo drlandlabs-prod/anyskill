@@ -30,8 +30,11 @@ export function useDictation(onFinal: (text: string) => void, onInterim: (text: 
   const recRef = useRef<SpeechRecognitionInstance | null>(null)
   const finalRef = useRef(onFinal)
   const interimRef = useRef(onInterim)
-  finalRef.current = onFinal
-  interimRef.current = onInterim
+
+  useEffect(() => {
+    finalRef.current = onFinal
+    interimRef.current = onInterim
+  }, [onFinal, onInterim])
 
   const stop = useCallback(() => {
     recRef.current?.stop()
