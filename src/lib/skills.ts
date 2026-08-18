@@ -119,3 +119,87 @@ export const SPRINTS = [
   { n: 6, focus: 'Packaging + pressure tactics', duration: '90 min', status: 'locked' as const },
   { n: 7, focus: 'Capstone: live negotiation', duration: '90 min', status: 'locked' as const },
 ]
+
+// ---------------------------------------------------------------------------
+// Dynamic content engine — sprints and drills derived from the CURRENT skill,
+// not hardcoded. Negotiation keeps its hand-authored content as the showcase.
+
+export interface Sprint {
+  n: number
+  focus: string
+  duration: string
+  status: 'done' | 'active' | 'next' | 'locked'
+}
+
+/** Build the sprint plan from a skill graph: known nodes collapse into the
+ *  diagnosis, remaining nodes become sprints in tier order. */
+export function buildSprints(graph: SkillGraph): Sprint[] {
+  const known = graph.nodes.filter((n) => n.state === 'known')
+  const todo = graph.nodes
+    .filter((n) => n.state !== 'known')
+    .sort((a, b) => a.tier - b.tier)
+
+  const sprints: Sprint[] = []
+  if (known.length > 0) {
+    sprints.push({
+      n: 0,
+      focus: `Diagnosis: ${known.length} foundations already known`,
+      duration: '—',
+      status: 'done',
+    })
+  }
+  todo.forEach((node, i) => {
+    const mins = Math.round(Math.min(90, Math.max(45, node.hours * 45)))
+    sprints.push({
+      n: sprints.length,
+      focus: node.label,
+      duration: `${mins} min`,
+      status: node.state === 'available' ? (i === 0 || todo.slice(0, i).every((t) => t.state !== 'available') ? 'active' : 'next') : 'locked',
+    })
+  })
+  // ensure exactly one active sprint
+  if (!sprints.some((s) => s.status === 'active')) {
+    const first = sprints.find((s) => s.status === 'next' || s.status === 'locked')
+    if (first) first.status = 'active'
+  }
+  return sprints
+}
+
+/** The node a sprint should train right now (stored when user clicks a node). */
+const NODE_KEY = 'anyskill.activeNode'
+
+export function saveActiveNode(id: string) { localStorage.setItem(NODE_KEY, id) }
+
+export function loadActiveNode(graph: SkillGraph): SkillNode {
+  const stored = localStorage.getItem(NODE_KEY)
+  const byId = stored ? graph.nodes.find((n) => n.id === stored) : undefined
+  if (byId && byId.state !== 'locked') return byId
+  return (
+    graph.nodes.find((n) => n.state === 'available') ??
+    graph.nodes.find((n) => n.state !== 'known') ??
+    graph.nodes[0]
+  )
+}
+
+/** Generate drill content for any node of any skill. */
+export function buildDrill(node: SkillNode, skill: string): Drill {
+  if (node.id === 'anchoring') return ANCHORING_DRILL
+  const label = node.label.replace(/^CAPSTONE · /, '')
+  const isCapstone = /^CAPSTONE/.test(node.label)
+  return {
+    prompt: isCapstone
+      ? `CAPSTONE — Produce a real artifact that proves "${label}" for ${skill}. Do the whole thing end-to-end, then describe what you made and the decisions you took.`
+      : `SCENARIO — You need to apply "${label}" in a real ${skill} situation today. Describe exactly what you would do, step by step, and — most importantly — why each step works.`,
+    hint: `Strong answers are specific, name the underlying principle behind "${label}", and say what a beginner would get wrong.`,
+    goodSignals: ['because', 'first', 'then', 'principle', 'why', 'step'],
+    feedbackGood: `Strong application — you reasoned from the principle, not from a script. In BKT terms: slip probability low, mastery +0.18 on "${label}".`,
+    feedbackWeak: `You stayed on the surface. Anchor each step to the principle behind "${label}" and state why it works — then the skill transfers to new situations. Mastery +0.05.`,
+  }
+}
+
+/** Full reset between learning tasks — clears the profile and active node. */
+export function resetProgress(includeHabits = false) {
+  localStorage.removeItem('anyskill.profile')
+  localStorage.removeItem(NODE_KEY)
+  if (includeHabits) localStorage.removeItem('anyskill.habits.v1')
+}

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { MatrixRain } from '@/components/MatrixRain'
 import { Button } from '@/components/ui/button'
-import { ANCHORING_DRILL } from '@/lib/skills'
+import { decomposeSkill, loadActiveNode, buildDrill } from '@/lib/skills'
 import { loadProfile } from '@/lib/session'
 
 type Phase = 'prime' | 'model' | 'drill' | 'reflect' | 'done'
@@ -17,11 +17,20 @@ const PHASES: { id: Phase; label: string; dur: string }[] = [
 export function Session() {
   const navigate = useNavigate()
   const profile = loadProfile()
+  const skill = profile?.skill ?? 'Negotiation'
+  const graph = useMemo(
+    () => decomposeSkill(skill, profile?.priorLevel ?? 'none'),
+    [skill, profile?.priorLevel],
+  )
+  const node = useMemo(() => loadActiveNode(graph), [graph])
+  const drill = useMemo(() => buildDrill(node, skill), [node, skill])
+  const nodeLabel = node.label.replace(/^CAPSTONE · /, '')
+  const isAnchoring = node.id === 'anchoring'
   const [phase, setPhase] = useState<Phase>('prime')
   const [answer, setAnswer] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
   const [good, setGood] = useState(false)
-  const [mastery, setMastery] = useState(12)
+  const [mastery, setMastery] = useState(() => Math.round(node.mastery * 100) || 12)
   const [seconds, setSeconds] = useState(0)
   const [reflectText, setReflectText] = useState('')
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -36,10 +45,10 @@ export function Session() {
 
   const submitAnswer = () => {
     if (!answer.trim()) return
-    const hits = ANCHORING_DRILL.goodSignals.filter((s) => answer.toLowerCase().includes(s.toLowerCase()))
+    const hits = drill.goodSignals.filter((s) => answer.toLowerCase().includes(s.toLowerCase()))
     const isGood = hits.length >= 3
     setGood(isGood)
-    setFeedback(isGood ? ANCHORING_DRILL.feedbackGood : ANCHORING_DRILL.feedbackWeak)
+    setFeedback(isGood ? drill.feedbackGood : drill.feedbackWeak)
     setMastery((m) => Math.min(100, m + (isGood ? 18 : 5)))
   }
 
@@ -60,7 +69,7 @@ export function Session() {
           <span className="text-signal">_</span>
         </button>
         <div className="text-[11px] text-muted-foreground uppercase">
-          SPRINT 2 · {profile?.skill ?? 'Negotiation'} · NODE: ANCHORING
+          SPRINT · {skill} · NODE: {nodeLabel.toUpperCase()}
         </div>
         <div className="text-matrix text-sm glow-soft tabular-nums">{mm}:{ss}</div>
       </header>
@@ -89,16 +98,34 @@ export function Session() {
           {phase === 'prime' && (
             <div className="max-w-2xl fade-up space-y-6">
               <div className="font-mono text-[11px] tracking-[0.3em] text-signal">// PRIME — WHY THIS MATTERS</div>
-              <h2 className="text-3xl font-bold text-offwhite">Anchoring: whoever names a number first bends reality.</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                The first number in a negotiation pulls the entire outcome toward it — even for experts.
-                Today's drill: you will practice <span className="text-matrix">re-anchoring</span> when the
-                other side opens low. By the end of this sprint you should be able to counter-anchor
-                <span className="text-offwhite"> calmly, specifically, and without apologizing</span>.
-              </p>
-              <div className="border border-matrix/30 rounded p-4 bg-card font-mono text-xs text-matrix/80 box-glow">
-                SUCCESS CRITERIA — state a specific counter-number · justify with value/scope · then hold silence
-              </div>
+              {isAnchoring ? (
+                <>
+                  <h2 className="text-3xl font-bold text-offwhite">Anchoring: whoever names a number first bends reality.</h2>
+                  <p className="text-muted-foreground leading-relaxed">
+                    The first number in a negotiation pulls the entire outcome toward it — even for experts.
+                    Today's drill: you will practice <span className="text-matrix">re-anchoring</span> when the
+                    other side opens low. By the end of this sprint you should be able to counter-anchor
+                    <span className="text-offwhite"> calmly, specifically, and without apologizing</span>.
+                  </p>
+                  <div className="border border-matrix/30 rounded p-4 bg-card font-mono text-xs text-matrix/80 box-glow">
+                    SUCCESS CRITERIA — state a specific counter-number · justify with value/scope · then hold silence
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-3xl font-bold text-offwhite">{nodeLabel}: the next node on your {skill} graph.</h2>
+                  <p className="text-muted-foreground leading-relaxed">
+                    This sprint trains <span className="text-matrix">{nodeLabel}</span> — a{' '}
+                    <span className="text-offwhite">{node.kind}</span> node estimated at{' '}
+                    <span className="text-matrix">{node.hours}h</span> to acquire. You'll get one worked example,
+                    then practice at the edge of your ability with instant feedback.
+                    {node.transfer && <span className="text-signal"> This is a transferable anchor — it speeds up every related skill you learn later.</span>}
+                  </p>
+                  <div className="border border-matrix/30 rounded p-4 bg-card font-mono text-xs text-matrix/80 box-glow">
+                    SUCCESS CRITERIA — apply {nodeLabel} to a concrete case · name the principle behind each move · state what a beginner would miss
+                  </div>
+                </>
+              )}
               <Button onClick={next} className="bg-primary text-primary-foreground font-mono tracking-widest hover:bg-primary/90">
                 CONTINUE ▸
               </Button>
@@ -108,27 +135,54 @@ export function Session() {
           {phase === 'model' && (
             <div className="max-w-2xl fade-up space-y-6">
               <div className="font-mono text-[11px] tracking-[0.3em] text-signal">// MODEL — WORKED EXAMPLE</div>
-              <h2 className="text-3xl font-bold text-offwhite">Watch an expert re-anchor.</h2>
-              <div className="space-y-3 font-mono text-sm">
-                <div className="border border-border rounded p-4 bg-black/50">
-                  <span className="text-muted-foreground text-xs">CLIENT</span>
-                  <p className="text-offwhite mt-1">"We usually pay around $85/hr for this."</p>
-                </div>
-                <div className="border border-matrix/40 rounded p-4 bg-brg/30 box-glow">
-                  <span className="text-matrix text-xs">EXPERT — note the 3 moves</span>
-                  <p className="text-offwhite mt-1">
-                    "For the scope you described — <span className="text-matrix">①</span> my rate is
-                    <span className="text-signal"> $125/hr</span>. <span className="text-matrix">②</span> That's based
-                    on the last three launches I shipped on this exact stack. <span className="text-matrix">③</span> …"
-                    <span className="text-muted-foreground">(silence)</span>
-                  </p>
-                </div>
-              </div>
-              <ol className="font-mono text-xs text-muted-foreground space-y-1.5">
-                <li><span className="text-matrix">①</span> Specific number, above target — delivered flatly</li>
-                <li><span className="text-matrix">②</span> Justified with value, not apology</li>
-                <li><span className="text-matrix">③</span> Silence — let the anchor do the work</li>
-              </ol>
+              {isAnchoring ? (
+                <>
+                  <h2 className="text-3xl font-bold text-offwhite">Watch an expert re-anchor.</h2>
+                  <div className="space-y-3 font-mono text-sm">
+                    <div className="border border-border rounded p-4 bg-black/50">
+                      <span className="text-muted-foreground text-xs">CLIENT</span>
+                      <p className="text-offwhite mt-1">"We usually pay around $85/hr for this."</p>
+                    </div>
+                    <div className="border border-matrix/40 rounded p-4 bg-brg/30 box-glow">
+                      <span className="text-matrix text-xs">EXPERT — note the 3 moves</span>
+                      <p className="text-offwhite mt-1">
+                        "For the scope you described — <span className="text-matrix">①</span> my rate is
+                        <span className="text-signal"> $125/hr</span>. <span className="text-matrix">②</span> That's based
+                        on the last three launches I shipped on this exact stack. <span className="text-matrix">③</span> …"
+                        <span className="text-muted-foreground">(silence)</span>
+                      </p>
+                    </div>
+                  </div>
+                  <ol className="font-mono text-xs text-muted-foreground space-y-1.5">
+                    <li><span className="text-matrix">①</span> Specific number, above target — delivered flatly</li>
+                    <li><span className="text-matrix">②</span> Justified with value, not apology</li>
+                    <li><span className="text-matrix">③</span> Silence — let the anchor do the work</li>
+                  </ol>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-3xl font-bold text-offwhite">Watch an expert apply {nodeLabel}.</h2>
+                  <div className="space-y-3 font-mono text-sm">
+                    <div className="border border-border rounded p-4 bg-black/50">
+                      <span className="text-muted-foreground text-xs">SITUATION</span>
+                      <p className="text-offwhite mt-1">A realistic {skill} case where {nodeLabel} decides the outcome.</p>
+                    </div>
+                    <div className="border border-matrix/40 rounded p-4 bg-brg/30 box-glow">
+                      <span className="text-matrix text-xs">EXPERT — note the 3 moves</span>
+                      <p className="text-offwhite mt-1">
+                        <span className="text-matrix">①</span> Names the principle behind {nodeLabel} before acting.{' '}
+                        <span className="text-matrix">②</span> Applies it step by step, saying why each step works.{' '}
+                        <span className="text-matrix">③</span> Checks the result against what a beginner would have done.
+                      </p>
+                    </div>
+                  </div>
+                  <ol className="font-mono text-xs text-muted-foreground space-y-1.5">
+                    <li><span className="text-matrix">①</span> Principle first — never start from a script</li>
+                    <li><span className="text-matrix">②</span> Reasoned steps — every move has a "because"</li>
+                    <li><span className="text-matrix">③</span> Self-check — contrast with the naive approach</li>
+                  </ol>
+                </>
+              )}
               <Button onClick={next} className="bg-primary text-primary-foreground font-mono tracking-widest hover:bg-primary/90">
                 ENTER DRILL ▸
               </Button>
@@ -139,9 +193,9 @@ export function Session() {
             <div className="max-w-2xl fade-up space-y-6">
               <div className="font-mono text-[11px] tracking-[0.3em] text-signal">// DRILL — DELIBERATE PRACTICE · ATTEMPT 1/3</div>
               <div className="border border-matrix/30 rounded p-5 bg-card box-glow">
-                <p className="font-mono text-sm text-offwhite leading-relaxed whitespace-pre-line">{ANCHORING_DRILL.prompt}</p>
+                <p className="font-mono text-sm text-offwhite leading-relaxed whitespace-pre-line">{drill.prompt}</p>
               </div>
-              <p className="font-mono text-xs text-muted-foreground">HINT · {ANCHORING_DRILL.hint}</p>
+              <p className="font-mono text-xs text-muted-foreground">HINT · {drill.hint}</p>
               <textarea
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
@@ -176,13 +230,13 @@ export function Session() {
           {phase === 'reflect' && (
             <div className="max-w-2xl fade-up space-y-6">
               <div className="font-mono text-[11px] tracking-[0.3em] text-signal">// REFLECT — FEYNMAN CHECK</div>
-              <h2 className="text-3xl font-bold text-offwhite">Explain anchoring back, in your own words.</h2>
+              <h2 className="text-3xl font-bold text-offwhite">Explain {nodeLabel.toLowerCase()} back, in your own words.</h2>
               <p className="text-muted-foreground">Teach it to a smart 12-year-old. Gaps in your explanation get routed back into tomorrow's plan automatically.</p>
               <textarea
                 value={reflectText}
                 onChange={(e) => setReflectText(e.target.value)}
                 rows={4}
-                placeholder="Anchoring is…"
+                placeholder={`${nodeLabel} is…`}
                 className="w-full bg-black/50 border border-matrix/30 rounded px-4 py-3 font-mono text-sm text-offwhite placeholder:text-muted-foreground focus:outline-none focus:border-matrix focus:box-glow"
               />
               <Button
@@ -198,9 +252,9 @@ export function Session() {
           {phase === 'done' && (
             <div className="max-w-2xl fade-up space-y-6 text-center mx-auto pt-8">
               <div className="font-mono text-6xl text-matrix glow-matrix">✓</div>
-              <h2 className="text-3xl font-bold text-offwhite">Sprint 2 complete.</h2>
+              <h2 className="text-3xl font-bold text-offwhite">Sprint complete.</h2>
               <p className="font-mono text-sm text-muted-foreground">
-                NODE: ANCHORING → mastery <span className="text-matrix">{mastery}%</span> ·
+                NODE: {nodeLabel.toUpperCase()} → mastery <span className="text-matrix">{mastery}%</span> ·
                 spaced-repetition reviews scheduled at <span className="text-signal">+1d, +3d, +7d</span>
               </p>
               <div className="flex gap-3 justify-center">

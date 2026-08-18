@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router'
 import { MatrixRain } from '@/components/MatrixRain'
 import { SkillGraph } from '@/components/SkillGraph'
 import { Button } from '@/components/ui/button'
-import { decomposeSkill, SPRINTS, type SkillNode } from '@/lib/skills'
+import { decomposeSkill, buildSprints, saveActiveNode, resetProgress, type SkillNode } from '@/lib/skills'
 import { loadProfile } from '@/lib/session'
 
 const KIND_COLOR: Record<SkillNode['kind'], string> = {
@@ -19,10 +19,22 @@ export function SkillMap() {
     () => decomposeSkill(profile?.skill ?? 'Negotiation', profile?.priorLevel ?? 'none'),
     [profile?.skill, profile?.priorLevel],
   )
+  const sprints = useMemo(() => buildSprints(graph), [graph])
+  const activeSprint = sprints.find((s) => s.status === 'active')
   const [selected, setSelected] = useState<SkillNode | null>(null)
 
   const known = graph.nodes.filter((n) => n.state === 'known').length
   const frontier = graph.nodes.filter((n) => n.state === 'available' || n.state === 'active')
+
+  const train = (node?: SkillNode) => {
+    if (node) saveActiveNode(node.id)
+    navigate('/session')
+  }
+
+  const reset = () => {
+    resetProgress()
+    navigate('/')
+  }
 
   return (
     <div className="scanlines min-h-screen flex flex-col">
@@ -41,11 +53,18 @@ export function SkillMap() {
           <button onClick={() => navigate('/habits')} className="font-mono text-[11px] text-signal hover:text-accent tracking-widest transition-colors">
             HABITS ▸
           </button>
+          <button
+            onClick={reset}
+            title="Clear saved profile + active node, start a fresh skill"
+            className="font-mono text-[11px] text-muted-foreground hover:text-signal tracking-widest transition-colors"
+          >
+            ↺ NEW SKILL
+          </button>
           <Button
             className="bg-accent text-accent-foreground font-mono text-xs tracking-widest hover:bg-accent/90 box-glow-orange"
-            onClick={() => navigate('/session')}
+            onClick={() => train()}
           >
-            ▶ START SPRINT 2
+            ▶ {activeSprint ? `START SPRINT ${activeSprint.n}` : 'START SPRINT'}
           </Button>
         </div>
       </header>
@@ -94,7 +113,7 @@ export function SkillMap() {
               {(selected.state === 'available' || selected.state === 'active') && (
                 <Button
                   className="w-full mt-4 bg-primary text-primary-foreground font-mono text-xs hover:bg-primary/90"
-                  onClick={() => navigate('/session')}
+                  onClick={() => train(selected)}
                 >
                   TRAIN THIS NODE ▸
                 </Button>
@@ -111,7 +130,7 @@ export function SkillMap() {
           <div>
             <div className="font-mono text-[10px] tracking-widest text-muted-foreground mb-2">SPRINT PLAN</div>
             <div className="space-y-1.5">
-              {SPRINTS.map((s) => (
+              {sprints.map((s) => (
                 <div
                   key={s.n}
                   className={`flex items-center gap-3 px-3 py-2 rounded border font-mono text-xs ${

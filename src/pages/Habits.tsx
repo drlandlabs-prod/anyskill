@@ -6,6 +6,7 @@ import {
   loadHabit, saveHabit, completeRep, streak, missedYesterday, heatmapDays,
   FOUR_LAWS, TWO_MIN_REP, type HabitState,
 } from '@/lib/habits'
+import { decomposeSkill, loadActiveNode } from '@/lib/skills'
 import { loadProfile } from '@/lib/session'
 
 export function Habits() {
@@ -14,6 +15,19 @@ export function Habits() {
   const [habit, setHabit] = useState<HabitState>(() => loadHabit())
   const [repState, setRepState] = useState<'idle' | 'running' | 'done'>('idle')
   const [secs, setSecs] = useState(120)
+
+  // the daily rep trains whatever node is active on the current skill graph
+  const rep = useMemo(() => {
+    if (!profile) return TWO_MIN_REP
+    const graph = decomposeSkill(profile.skill, profile.priorLevel)
+    const node = loadActiveNode(graph)
+    const label = node.label.replace(/^CAPSTONE · /, '')
+    return {
+      title: `One rep of "${label}"`,
+      instruction: `Do a single 2-minute rep of ${label} for ${profile.skill}: one concrete application, out loud or on paper. That's it.`,
+      reward: `+mastery on ${label.toUpperCase()} · streak extended`,
+    }
+  }, [profile?.skill, profile?.priorLevel])
 
   const s = streak(habit)
   const missed = missedYesterday(habit)
@@ -98,8 +112,8 @@ export function Habits() {
           {/* today's 2-minute rep */}
           <section className="border border-matrix/40 rounded p-6 bg-card box-glow">
             <div className="font-mono text-[11px] tracking-[0.3em] text-signal mb-2">// TODAY'S 2-MINUTE REP</div>
-            <h2 className="text-2xl font-bold text-offwhite">{TWO_MIN_REP.title}</h2>
-            <p className="mt-2 text-muted-foreground leading-relaxed max-w-xl">{TWO_MIN_REP.instruction}</p>
+            <h2 className="text-2xl font-bold text-offwhite">{rep.title}</h2>
+            <p className="mt-2 text-muted-foreground leading-relaxed max-w-xl">{rep.instruction}</p>
 
             {repState === 'idle' && !todayDone && (
               <Button onClick={startRep} className="mt-5 bg-primary text-primary-foreground font-mono tracking-widest hover:bg-primary/90">
@@ -118,7 +132,7 @@ export function Habits() {
             )}
             {(repState === 'done' || todayDone) && (
               <div className="mt-5 fade-up font-mono text-sm text-matrix glow-soft">
-                ✓ REP LOGGED — {TWO_MIN_REP.reward}
+                ✓ REP LOGGED — {rep.reward}
               </div>
             )}
           </section>
